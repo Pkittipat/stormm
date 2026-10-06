@@ -16,10 +16,21 @@ describe('validate', () => {
     expect(codes(b)).toEqual(expect.arrayContaining(['error:duplicate-id', 'error:id-format']))
   })
 
-  it('rejects unknown kinds, including the old system kind', () => {
+  it('rejects unknown kinds', () => {
     const b = checkout()
-    ;(b.blocks[2] as { kind: string }).kind = 'system'
+    ;(b.blocks[2] as { kind: string }).kind = 'gateway'
     expect(validate(b)).toContainEqual(expect.objectContaining({ level: 'error', code: 'unknown-kind', path: 'blocks[2].kind' }))
+  })
+
+  it('lets an external system stand where an aggregate would: command → system → event', () => {
+    const b = checkout()
+    b.blocks.push(
+      { id: 'charge-card', kind: 'command', title: 'Charge card', invariants: [], hotspots: [], fields: [] },
+      { id: 'payment-gateway', kind: 'system', title: 'Payment gateway', invariants: [], hotspots: [], fields: [] },
+      { id: 'card-charged', kind: 'event', title: 'Card charged', invariants: [], hotspots: [], fields: [] },
+    )
+    b.connections.push({ from: 'charge-card', to: 'payment-gateway' }, { from: 'payment-gateway', to: 'card-charged' })
+    expect(validate(b)).toEqual([])
   })
 
   it('rejects an empty invariant and warns about invariants off an aggregate', () => {

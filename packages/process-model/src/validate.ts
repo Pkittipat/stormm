@@ -4,12 +4,14 @@ import { BLOCK_KINDS, SCHEMA_VERSION, connectionKey, type BlockKind, type Board 
 
 /**
  * Usual next steps: readmodel → command → aggregate → event → policy → command,
- * plus event → read model (a read model is built from events).
+ * plus event → read model (a read model is built from events). An external system
+ * stands where an aggregate would: command → system → event.
  */
 const NEXT: Record<BlockKind, BlockKind[]> = {
   readmodel: ['command'],
-  command: ['aggregate'],
+  command: ['aggregate', 'system'],
   aggregate: ['event'],
+  system: ['event'],
   event: ['policy', 'readmodel'],
   policy: ['command'],
 }
@@ -18,6 +20,7 @@ const KIND_LABEL: Record<BlockKind, string> = {
   readmodel: 'read model',
   command: 'command',
   aggregate: 'aggregate',
+  system: 'external system',
   event: 'event',
   policy: 'policy',
 }
@@ -70,7 +73,7 @@ export function validate(board: Board): Issue[] {
     if (BLOCK_KINDS.includes(from.kind) && BLOCK_KINDS.includes(to.kind) && !NEXT[from.kind].includes(to.kind))
       warn(
         'grammar',
-        `“${from.title}” → “${to.title}” is ${KIND_LABEL[from.kind]} → ${KIND_LABEL[to.kind]}; a process usually goes read model → command → aggregate → event → policy → command (or event → read model).`,
+        `“${from.title}” → “${to.title}” is ${KIND_LABEL[from.kind]} → ${KIND_LABEL[to.kind]}; a process usually goes read model → command → aggregate → event → policy → command (or event → read model; an external system can stand in for the aggregate).`,
         path,
       )
   })

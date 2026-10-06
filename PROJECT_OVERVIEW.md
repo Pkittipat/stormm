@@ -29,6 +29,7 @@ Code generation is part of Stormm's vision and roadmap — the exact mapping isn
 | Event | Domain event appended to the aggregate's event stream | `OrderPlaced` |
 | Aggregate (generated alongside) | Repository | persists/loads the `Order` aggregate |
 | Policy | Reactive handler triggered by an event | "whenever Order Placed, record activity log" |
+| External system | Something outside the domain that handles a command and reports back with an event | a payment gateway: `Charge Card` → `Card Charged` |
 
 Modeling the process and generating the domain code would become the same act — no separate translation step from diagram to code, so the two never drift apart. That's the vision for cutting development time and keeping the code consistent; the exact implementation is still on the roadmap.
 
@@ -36,6 +37,6 @@ Modeling the process and generating the domain code would become the same act �
 
 - **Sidebar** lists Processes, one row per process the user is modeling.
 - **Canvas** fills the rest of the window — the main work surface, kept as large as possible for interacting with the process model.
-- **Block** is the unit of the canvas: draggable and connectable, one per command, aggregate, event, policy, or read model.
+- **Block** is the unit of the canvas: draggable and connectable, one per command, aggregate, external system, event, policy, or read model.
 - **Actor** (e.g. Customer) is never its own block — it's an attribute on the block it applies to.
 - **Hotspot** is never its own block either — it's an attribute on the block it applies to.

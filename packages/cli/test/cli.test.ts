@@ -36,7 +36,20 @@ describe('buildContract', () => {
   })
 
   it('reports what the storm leaves open', () => {
-    expect(c.gaps).toContain('Command "Notify Member" is not handled by any aggregate: the storm doesn\'t say what decides it or which event it records.')
+    expect(c.gaps).toContain('Command "Notify Member" is not handled by any aggregate or external system: the storm doesn\'t say what decides it or which event it records.')
+  })
+
+  it('reads an external system like an aggregate it doesn\'t own', () => {
+    const b = board(PUBLISH_JOB)
+    b.blocks.push(
+      { id: 'mailer', kind: 'system', title: 'Mailer', invariants: [], hotspots: [], fields: [] },
+      { id: 'member-notified', kind: 'event', title: 'Member Notified', invariants: [], hotspots: [], fields: [{ name: 'memberId', type: 'ID' }] },
+    )
+    b.connections.push({ from: 'notify-member', to: 'mailer' }, { from: 'mailer', to: 'member-notified' })
+    const sc = buildContract(b)
+    expect(sc.units.find((u) => u.id === 'mailer')!.links).toEqual({ handles: ['notify-member'], records: ['member-notified'] })
+    expect(sc.arrows.map((a) => a.text)).toEqual(expect.arrayContaining(['Mailer handles Notify Member', 'Mailer records Member Notified']))
+    expect(sc.gaps.filter((g) => !g.startsWith('Hotspot') && /Notify Member|Mailer|Member Notified/.test(g))).toEqual([])
   })
 })
 

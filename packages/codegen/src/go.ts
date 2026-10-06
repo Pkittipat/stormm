@@ -114,7 +114,9 @@ export function generateGo(board: Board, options: GenerateOptions = {}): Generat
       if (from === agg.block && to.kind === 'event') owner('event', to, agg)
     }
   }
-  for (const b of board.blocks) {
+  // Commands handled by, and events recorded by, an external system are outside this code.
+  const external = new Set(links.flatMap(({ from, to }) => (to.kind === 'system' && from.kind === 'command' ? [from] : from.kind === 'system' && to.kind === 'event' ? [to] : [])))
+  for (const b of board.blocks.filter((b) => !external.has(b))) {
     if (b.kind === 'command' && !aggregates.some((a) => a.commands.includes(b)))
       issue('warning', 'codegen/orphan-command', `Command "${b.title}" does not lead to an aggregate, so no code is generated for it.`)
     if (b.kind === 'event' && !aggregates.some((a) => a.events.includes(b)))

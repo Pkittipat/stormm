@@ -64,7 +64,7 @@ connections:
 | Key | Required | Meaning |
 |---|---|---|
 | `id` | yes | Slug of the title at creation, then frozen. Unique in the file (collision → `order-2`). |
-| `kind` | yes | `readmodel` \| `command` \| `aggregate` \| `event` \| `policy` |
+| `kind` | yes | `readmodel` \| `command` \| `aggregate` \| `system` \| `event` \| `policy` (`system` is an external system) |
 | `title` | yes | Business name on the card. |
 | `actor` | no | Who performs it, e.g. `Customer`. |
 | `invariants` | no | Aggregates only: rules the aggregate always protects, list of strings in plain words, e.g. `A job can only be published once`. |
@@ -125,12 +125,12 @@ Dragging is a personal view preference. It is kept in `localStorage` separately 
 |---|---|
 | `schemaVersion` is known | error |
 | IDs are valid slugs and block IDs are unique | error |
-| `kind` is one of the five kinds | error |
+| `kind` is one of the six kinds | error |
 | An invariant is empty | error |
 | Invariants on a block that isn't an aggregate | warning |
 | Connection ends exist | error |
 | Duplicate connection, or a block connected to itself | error |
-| Grammar: `readmodel → command → aggregate → event → policy → command`, plus `event → readmodel` | warning |
+| Grammar: `readmodel → command → aggregate → event → policy → command`, plus `event → readmodel`; an external system can stand in for the aggregate: `command → system → event` | warning |
 | Block with no connections | warning |
 
 ## Versioning

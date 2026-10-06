@@ -10,7 +10,7 @@ id: publish-job            # process id, a slug
 name: Publish Job
 blocks:
   - id: publish-job        # stable slug; renames change the title, never the id
-    kind: command          # readmodel | command | aggregate | event | policy
+    kind: command          # readmodel | command | aggregate | system | event | policy
     title: Publish Job     # the business name
     actor: Recruiter       # optional: who does it
     invariants: [ "…" ]    # optional, aggregates only: rules it always protects, in plain words
@@ -29,6 +29,7 @@ Match blocks by `id`, never by title. Two versions of a storm describe the same 
 |---|---|---|---|
 | **command** | interface: an operation (input) | Someone (the actor) intends to do something. | Let that actor express the intention with the data in its fields. It may be refused. |
 | **aggregate** | model | This is where the rules live that decide whether an intention is allowed. Things inside it stay consistent together. | Decide the commands it handles, protect its rules, and produce the events that follow. |
+| **system** (external system) | model: outside the domain | Something the business doesn't own (a payment provider, an email service, another team's system) decides this command. | Hand the command to that system through the project's existing integration (or a port for one), and turn its answer into the event. Its rules are not ours to implement. |
 | **event** | interface: a fact announced (output) | This fact happened and matters to the business. Past tense; it can't be undone. | Record or announce the fact with the data in its fields, so others can react. |
 | **policy** | usage: automatic | Whenever this happens, the business does that. A standing rule of reaction. | React to the event by issuing the command, without someone having to ask. |
 | **read model** | usage: the read path, what a user sees to decide | Someone needs to see this to make a decision. | Expose exactly its fields, read-only. See [Read models](#read-models). |
@@ -48,13 +49,15 @@ A read model is the **read path** of the design, and the counterpart of the comm
 
 ## What each arrow designs
 
-The storm reads left to right: `read model → command → aggregate → event → policy → command`, and `event → read model`.
+The storm reads left to right: `read model → command → aggregate → event → policy → command`, and `event → read model`. An external system stands where an aggregate would: `command → system → event`.
 
 | Arrow | Reads as | What it designs |
 |---|---|---|
 | read model → command | *Job Detail feeds Publish Job* | The actor decides to publish while looking at the job's detail. |
 | command → aggregate | *Job handles Publish Job* | Job's rules decide whether publishing is allowed. |
 | aggregate → event | *Job records Job Published* | When it is allowed, the fact "Job Published" results. |
+| command → system | *Payment Gateway handles Charge Card* | Another system, not our rules, decides this command. |
+| system → event | *Payment Gateway records Card Charged* | That system's answer comes back as this fact. |
 | event → policy | *Job Published triggers Log activity* | That fact sets off a business reaction. |
 | policy → command | *Log activity sends Create Activity Log* | The reaction is this intention, issued automatically. |
 | event → read model | *Job Published updates Job Detail* | The fact changes what people see. |
@@ -71,6 +74,6 @@ Treat these as questions for the user, not decisions for you:
 - **What state enforces a rule:** the aggregate keeps only what its invariants and events need.
 - **Which command leads to which event** when one aggregate handles several commands and records several events.
 - **Where a read model's information comes from** when no event updates it.
-- **What decides a command** that leads to no aggregate (often another system, or a gap in the storm).
+- **What decides a command** that leads to no aggregate or external system (a gap in the storm).
 - **Anything not drawn:** no arrow means no relationship. Don't add one because it seems natural.
 - **How any of it is built:** that's the project's.

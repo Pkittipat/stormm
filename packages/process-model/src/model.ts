@@ -1,7 +1,7 @@
 /** The only version this package writes. See docs/process-yaml-v1.md. */
 export const SCHEMA_VERSION = 1
 
-export const BLOCK_KINDS = ['readmodel', 'command', 'aggregate', 'event', 'policy'] as const
+export const BLOCK_KINDS = ['readmodel', 'command', 'aggregate', 'system', 'event', 'policy'] as const
 export type BlockKind = (typeof BLOCK_KINDS)[number]
 
 export interface Field {

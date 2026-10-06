@@ -7374,7 +7374,7 @@ import { basename, dirname, resolve } from "node:path";
 
 // ../process-model/src/model.ts
 var SCHEMA_VERSION = 1;
-var BLOCK_KINDS = ["readmodel", "command", "aggregate", "event", "policy"];
+var BLOCK_KINDS = ["readmodel", "command", "aggregate", "system", "event", "policy"];
 var connectionKey = (c) => `${c.from}->${c.to}`;
 
 // ../process-model/src/ids.ts
@@ -7507,8 +7507,9 @@ var isRecord = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
 // ../process-model/src/validate.ts
 var NEXT = {
   readmodel: ["command"],
-  command: ["aggregate"],
+  command: ["aggregate", "system"],
   aggregate: ["event"],
+  system: ["event"],
   event: ["policy", "readmodel"],
   policy: ["command"]
 };
@@ -7516,6 +7517,7 @@ var KIND_LABEL = {
   readmodel: "read model",
   command: "command",
   aggregate: "aggregate",
+  system: "external system",
   event: "event",
   policy: "policy"
 };
@@ -7560,7 +7562,7 @@ function validate(board2) {
     if (BLOCK_KINDS.includes(from.kind) && BLOCK_KINDS.includes(to.kind) && !NEXT[from.kind].includes(to.kind))
       warn(
         "grammar",
-        `\u201C${from.title}\u201D \u2192 \u201C${to.title}\u201D is ${KIND_LABEL[from.kind]} \u2192 ${KIND_LABEL[to.kind]}; a process usually goes read model \u2192 command \u2192 aggregate \u2192 event \u2192 policy \u2192 command (or event \u2192 read model).`,
+        `\u201C${from.title}\u201D \u2192 \u201C${to.title}\u201D is ${KIND_LABEL[from.kind]} \u2192 ${KIND_LABEL[to.kind]}; a process usually goes read model \u2192 command \u2192 aggregate \u2192 event \u2192 policy \u2192 command (or event \u2192 read model; an external system can stand in for the aggregate).`,
         path2
       );
   });
@@ -7685,6 +7687,7 @@ var KIND_LABEL2 = {
   readmodel: "read model",
   command: "command",
   aggregate: "aggregate",
+  system: "external system",
   event: "event",
   policy: "policy"
 };
@@ -7692,6 +7695,9 @@ var ROLES = {
   "readmodel>command": ["feeds", "feeds", "fedBy"],
   "command>aggregate": ["handles", "handledBy", "handles"],
   "aggregate>event": ["records", "records", "recordedBy"],
+  // An external system takes the aggregate's place: it handles a command and records what came of it.
+  "command>system": ["handles", "handledBy", "handles"],
+  "system>event": ["records", "records", "recordedBy"],
   "event>policy": ["triggers", "triggers", "triggeredBy"],
   "policy>command": ["sends", "sends", "sentBy"],
   "event>readmodel": ["updates", "updates", "updatedBy"]
@@ -7749,18 +7755,19 @@ function buildContract(board2) {
   const titles = (ids = []) => ids.map((id) => `"${units.get(id).title}"`).join(", ");
   for (const u of list) {
     const l = u.links;
-    if (u.kind === "command" && !l.handledBy) gaps.push(`Command "${u.title}" is not handled by any aggregate: the storm doesn't say what decides it or which event it records.`);
-    if (u.kind === "command" && (l.handledBy?.length ?? 0) > 1) gaps.push(`Command "${u.title}" is handled by more than one aggregate (${titles(l.handledBy)}).`);
+    if (u.kind === "command" && !l.handledBy) gaps.push(`Command "${u.title}" is not handled by any aggregate or external system: the storm doesn't say what decides it or which event it records.`);
+    if (u.kind === "command" && (l.handledBy?.length ?? 0) > 1) gaps.push(`Command "${u.title}" is handled by more than one aggregate or external system (${titles(l.handledBy)}).`);
     if (u.kind === "aggregate" && !l.handles) gaps.push(`Aggregate "${u.title}" handles no command.`);
     if (u.kind === "aggregate" && !l.records) gaps.push(`Aggregate "${u.title}" records no event.`);
     if (u.kind === "aggregate" && l.handles && !u.invariants.length) gaps.push(`Aggregate "${u.title}" states no invariants: the storm doesn't say when it refuses a command.`);
     if (u.kind === "aggregate" && (l.handles?.length ?? 0) > 1 && (l.records?.length ?? 0) > 1)
       gaps.push(`Aggregate "${u.title}" handles ${titles(l.handles)} and records ${titles(l.records)}; the storm doesn't say which command records which event.`);
-    if (u.kind === "event" && !l.recordedBy) gaps.push(`Event "${u.title}" is not recorded by any aggregate.`);
+    if (u.kind === "system" && !l.handles && !l.records) gaps.push(`External system "${u.title}" handles no command and records no event.`);
+    if (u.kind === "event" && !l.recordedBy) gaps.push(`Event "${u.title}" is not recorded by any aggregate or external system.`);
     if (u.kind === "policy" && !l.triggeredBy) gaps.push(`Policy "${u.title}" is not triggered by any event.`);
     if (u.kind === "policy" && !l.sends) gaps.push(`Policy "${u.title}" sends no command.`);
     if (u.kind === "readmodel" && !l.updatedBy) gaps.push(`Read model "${u.title}" is not updated by any event: the storm doesn't say where its data comes from.`);
-    if (!u.fields.length && u.kind !== "policy" && u.kind !== "aggregate") gaps.push(`${cap(KIND_LABEL2[u.kind])} "${u.title}" has no fields.`);
+    if (!u.fields.length && u.kind !== "policy" && u.kind !== "aggregate" && u.kind !== "system") gaps.push(`${cap(KIND_LABEL2[u.kind])} "${u.title}" has no fields.`);
     for (const h of u.hotspots) gaps.push(`Hotspot on "${u.title}": ${h}`);
   }
   const seen = /* @__PURE__ */ new Map();
@@ -7775,7 +7782,7 @@ function buildContract(board2) {
 }
 
 // src/render.ts
-var PLURAL = { command: "Commands", aggregate: "Aggregates", event: "Events", policy: "Policies", readmodel: "Read models" };
+var PLURAL = { command: "Commands", aggregate: "Aggregates", event: "Events", policy: "Policies", readmodel: "Read models", system: "External systems" };
 var fieldList = (u) => u.fields.length ? u.fields.map((f) => `${f.name}: ${f.type}`).join(", ") : "\u2014";
 function unitLine(u) {
   const extra = [u.actor && `actor ${u.actor}`, u.invariants.length && `invariants: ${u.invariants.join(" / ")}`, `fields ${fieldList(u)}`, u.hotspots.length && `hotspots: ${u.hotspots.join(" / ")}`].filter(Boolean);
@@ -7788,7 +7795,7 @@ function renderExplain(c, issues2) {
   out.push("## Issues", "");
   out.push(...issues2.length ? issues2.map((i) => `- ${i.level}: ${i.message}`) : ["- none"], "");
   out.push("## Units", "");
-  for (const kind of ["command", "aggregate", "event", "policy", "readmodel"]) {
+  for (const kind of ["command", "aggregate", "system", "event", "policy", "readmodel"]) {
     const us = c.units.filter((u) => u.kind === kind);
     if (!us.length) continue;
     out.push(`**${PLURAL[kind]}**`, "", ...us.map((u) => `- ${unitLine(u)}`), "");
@@ -7801,10 +7808,10 @@ function renderExplain(c, issues2) {
     out.push(`### ${cmd.title}${cmd.actor ? ` (by ${cmd.actor})` : ""}`, "");
     if (l.sentBy) out.push(`- sent by policy: ${l.sentBy.map(title).join(", ")}`);
     if (l.fedBy) out.push(`- fed by read model: ${l.fedBy.map(title).join(", ")}`);
-    if (!l.handledBy) out.push("- handled by: no aggregate in the storm");
+    if (!l.handledBy) out.push("- handled by: no aggregate or external system in the storm");
     for (const aggId of l.handledBy ?? []) {
       const agg = unit.get(aggId);
-      out.push(`- handled by aggregate: ${agg.title}`);
+      out.push(`- handled by ${agg.kind === "system" ? "external system" : "aggregate"}: ${agg.title}`);
       for (const evId of agg.links.records ?? []) {
         const ev = unit.get(evId);
         out.push(`  - records event: ${ev.title}`);

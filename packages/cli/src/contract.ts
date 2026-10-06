@@ -71,6 +71,7 @@ export const KIND_LABEL: Record<BlockKind, string> = {
   readmodel: 'read model',
   command: 'command',
   aggregate: 'aggregate',
+  system: 'external system',
   event: 'event',
   policy: 'policy',
 }
@@ -80,6 +81,9 @@ const ROLES: Partial<Record<`${BlockKind}>${BlockKind}`, [Role, LinkRole, LinkRo
   'readmodel>command': ['feeds', 'feeds', 'fedBy'],
   'command>aggregate': ['handles', 'handledBy', 'handles'],
   'aggregate>event': ['records', 'records', 'recordedBy'],
+  // An external system takes the aggregate's place: it handles a command and records what came of it.
+  'command>system': ['handles', 'handledBy', 'handles'],
+  'system>event': ['records', 'records', 'recordedBy'],
   'event>policy': ['triggers', 'triggers', 'triggeredBy'],
   'policy>command': ['sends', 'sends', 'sentBy'],
   'event>readmodel': ['updates', 'updates', 'updatedBy'],
@@ -138,19 +142,20 @@ export function buildContract(board: Board): Contract {
   const titles = (ids: string[] = []) => ids.map((id) => `"${units.get(id)!.title}"`).join(', ')
   for (const u of list) {
     const l = u.links
-    if (u.kind === 'command' && !l.handledBy) gaps.push(`Command "${u.title}" is not handled by any aggregate: the storm doesn't say what decides it or which event it records.`)
-    if (u.kind === 'command' && (l.handledBy?.length ?? 0) > 1) gaps.push(`Command "${u.title}" is handled by more than one aggregate (${titles(l.handledBy)}).`)
+    if (u.kind === 'command' && !l.handledBy) gaps.push(`Command "${u.title}" is not handled by any aggregate or external system: the storm doesn't say what decides it or which event it records.`)
+    if (u.kind === 'command' && (l.handledBy?.length ?? 0) > 1) gaps.push(`Command "${u.title}" is handled by more than one aggregate or external system (${titles(l.handledBy)}).`)
     if (u.kind === 'aggregate' && !l.handles) gaps.push(`Aggregate "${u.title}" handles no command.`)
     if (u.kind === 'aggregate' && !l.records) gaps.push(`Aggregate "${u.title}" records no event.`)
     if (u.kind === 'aggregate' && l.handles && !u.invariants.length) gaps.push(`Aggregate "${u.title}" states no invariants: the storm doesn't say when it refuses a command.`)
     if (u.kind === 'aggregate' && (l.handles?.length ?? 0) > 1 && (l.records?.length ?? 0) > 1)
       gaps.push(`Aggregate "${u.title}" handles ${titles(l.handles)} and records ${titles(l.records)}; the storm doesn't say which command records which event.`)
-    if (u.kind === 'event' && !l.recordedBy) gaps.push(`Event "${u.title}" is not recorded by any aggregate.`)
+    if (u.kind === 'system' && !l.handles && !l.records) gaps.push(`External system "${u.title}" handles no command and records no event.`)
+    if (u.kind === 'event' && !l.recordedBy) gaps.push(`Event "${u.title}" is not recorded by any aggregate or external system.`)
     if (u.kind === 'policy' && !l.triggeredBy) gaps.push(`Policy "${u.title}" is not triggered by any event.`)
     if (u.kind === 'policy' && !l.sends) gaps.push(`Policy "${u.title}" sends no command.`)
     if (u.kind === 'readmodel' && !l.updatedBy) gaps.push(`Read model "${u.title}" is not updated by any event: the storm doesn't say where its data comes from.`)
-    // An aggregate's state is the engineers' to design; a policy carries no data of its own.
-    if (!u.fields.length && u.kind !== 'policy' && u.kind !== 'aggregate') gaps.push(`${cap(KIND_LABEL[u.kind])} "${u.title}" has no fields.`)
+    // An aggregate's state is the engineers' to design; a policy or external system carries no data of its own here.
+    if (!u.fields.length && u.kind !== 'policy' && u.kind !== 'aggregate' && u.kind !== 'system') gaps.push(`${cap(KIND_LABEL[u.kind])} "${u.title}" has no fields.`)
     for (const h of u.hotspots) gaps.push(`Hotspot on "${u.title}": ${h}`)
   }
   // Two units whose code names collide would become one type.

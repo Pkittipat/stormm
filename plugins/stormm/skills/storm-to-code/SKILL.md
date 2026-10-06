@@ -1,6 +1,6 @@
 ---
 name: storm-to-code
-description: Process modeling coding. A finished Stormm event storm is already the domain design (the domain model, its interface, and how it is used), so implement that design in the project's own way instead of designing the domain again. Use when the user points at a storm or process YAML (schemaVersion + blocks + connections with kinds readmodel/command/aggregate/event/policy), asks to implement or change code from an event storm or process model, asks what a change in the storm means for the code, or asks whether the code still matches the storm. Works for any language and architecture.
+description: Process modeling coding. A finished Stormm event storm is already the domain design (the domain model, its interface, and how it is used), so implement that design in the project's own way instead of designing the domain again. Use when the user points at a storm or process YAML (schemaVersion + blocks + connections with kinds readmodel/command/aggregate/system/event/policy), asks to implement or change code from an event storm or process model, asks what a change in the storm means for the code, or asks whether the code still matches the storm. Works for any language and architecture.
 ---
 
 # Storm to code

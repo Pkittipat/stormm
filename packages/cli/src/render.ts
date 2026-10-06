@@ -1,7 +1,7 @@
 import type { Issue } from '@stormm/process-model'
 import type { Contract, Unit } from './contract.js'
 
-const PLURAL = { command: 'Commands', aggregate: 'Aggregates', event: 'Events', policy: 'Policies', readmodel: 'Read models' } as const
+const PLURAL = { command: 'Commands', aggregate: 'Aggregates', event: 'Events', policy: 'Policies', readmodel: 'Read models', system: 'External systems' } as const
 
 const fieldList = (u: Unit) => (u.fields.length ? u.fields.map((f) => `${f.name}: ${f.type}`).join(', ') : '—')
 
@@ -20,7 +20,7 @@ export function renderExplain(c: Contract, issues: Issue[]) {
   out.push(...(issues.length ? issues.map((i) => `- ${i.level}: ${i.message}`) : ['- none']), '')
 
   out.push('## Units', '')
-  for (const kind of ['command', 'aggregate', 'event', 'policy', 'readmodel'] as const) {
+  for (const kind of ['command', 'aggregate', 'system', 'event', 'policy', 'readmodel'] as const) {
     const us = c.units.filter((u) => u.kind === kind)
     if (!us.length) continue
     out.push(`**${PLURAL[kind]}**`, '', ...us.map((u) => `- ${unitLine(u)}`), '')
@@ -36,10 +36,10 @@ export function renderExplain(c: Contract, issues: Issue[]) {
     out.push(`### ${cmd.title}${cmd.actor ? ` (by ${cmd.actor})` : ''}`, '')
     if (l.sentBy) out.push(`- sent by policy: ${l.sentBy.map(title).join(', ')}`)
     if (l.fedBy) out.push(`- fed by read model: ${l.fedBy.map(title).join(', ')}`)
-    if (!l.handledBy) out.push('- handled by: no aggregate in the storm')
+    if (!l.handledBy) out.push('- handled by: no aggregate or external system in the storm')
     for (const aggId of l.handledBy ?? []) {
       const agg = unit.get(aggId)!
-      out.push(`- handled by aggregate: ${agg.title}`)
+      out.push(`- handled by ${agg.kind === 'system' ? 'external system' : 'aggregate'}: ${agg.title}`)
       for (const evId of agg.links.records ?? []) {
         const ev = unit.get(evId)!
         out.push(`  - records event: ${ev.title}`)

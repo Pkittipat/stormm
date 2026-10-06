@@ -24,7 +24,7 @@ interface BlockCardProps {
 
 /**
  * The core unit of the process canvas — a 140×104 card (a long title shrinks to fit rather than being cut off) representing one
- * of the five domain concepts. Selection is accent-driven, not type-
+ * of the six domain concepts. Selection is accent-driven, not type-
  * driven: a selected card always gets a 1.5px accent border + a
  * ring-accent/[14%] glow, regardless of `kind` (its own `-line` border
  * is dropped while selected). Connector ports (the small circles on the
