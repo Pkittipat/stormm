@@ -14,10 +14,13 @@ export function useMenu<T extends HTMLElement = HTMLDivElement>() {
       if (!ref.current?.contains(e.target as Node)) setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
-    document.addEventListener('pointerdown', onPointer)
+    // Capture phase: a target's own bubble-phase stopPropagation (e.g. a canvas block's click
+    // handler) must not be able to stop this from closing the menu — capture runs first, before
+    // that stopPropagation has a chance to fire.
+    document.addEventListener('pointerdown', onPointer, true)
     document.addEventListener('keydown', onKey)
     return () => {
-      document.removeEventListener('pointerdown', onPointer)
+      document.removeEventListener('pointerdown', onPointer, true)
       document.removeEventListener('keydown', onKey)
     }
   }, [open])
