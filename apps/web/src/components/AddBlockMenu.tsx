@@ -28,7 +28,7 @@ export function AddBlockMenu({ onSelect }: AddBlockMenuProps) {
           type="button"
           role="menuitem"
           onClick={() => onSelect(kind)}
-          className="flex h-control-sm items-center gap-step-md rounded-md border-0 bg-transparent px-step-sm text-left text-label text-text"
+          className="flex h-control-sm items-center gap-step-md rounded-md border-0 bg-transparent px-step-sm text-left text-label text-text outline-none hover:bg-surface-sunken focus-visible:bg-surface-sunken"
         >
           <TypeSwatch kind={kind} size="md" />
           {blockKindLabel[kind]}
