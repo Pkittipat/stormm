@@ -11,7 +11,7 @@ interface InspectorProps {
   onClose: () => void
 }
 
-/** The floating block inspector: edit a block's title, actor, invariants (aggregates), hotspots and fields, and see what it connects to. Floats over the canvas rather than docking, so selecting a block never shrinks the canvas and hides other blocks you might want to wire. */
+/** The docked block inspector: edit a block's title, actor, invariants (aggregates), hotspots and fields, and see what it connects to. Docks like the left sidebar (not floating) — the canvas compensates its own pan so blocks don't get hidden under it, see Canvas's resize handling. */
 export function Inspector({ block, board, onChange, onDelete, onSelectBlock, onClose }: InspectorProps) {
   // The row just added via "+", focused with its placeholder selected.
   const [fresh, setFresh] = useState<'invariant' | 'hotspot' | 'field' | null>(null)
@@ -29,7 +29,6 @@ export function Inspector({ block, board, onChange, onDelete, onSelectBlock, onC
 
   return (
     <Panel
-      variant="floating"
       kind={block.kind}
       title={
         <EditableText

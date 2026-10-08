@@ -28,7 +28,8 @@ export function Panel({ kind, title, onClose, variant = 'docked', children }: Pa
   const shellClass =
     variant === 'docked'
       ? 'h-full w-panel-width border-l border-border bg-surface-sunken'
-      : 'absolute top-step-2xl right-step-2xl w-panel-width rounded-floating-panel border border-border bg-surface-sunken shadow-float-md'
+      : // bottom clears the canvas's floating composer bar (24px offset + ~56px tall + a gap) so the two never overlap.
+        'absolute top-step-2xl right-step-2xl bottom-[88px] w-panel-width rounded-floating-panel border border-border bg-surface-sunken shadow-float-md'
 
   return (
     <aside aria-label="Block inspector" className={`box-border flex flex-col overflow-hidden p-step-lg ${shellClass}`}>

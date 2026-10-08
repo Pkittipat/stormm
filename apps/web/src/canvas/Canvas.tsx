@@ -127,7 +127,10 @@ export function Canvas({
   }
   /** Closes the menu and drops an unfinished wire: a connect drag in progress, or one waiting in the block menu. */
   const cancelWire = () => {
-    if (gesture.current?.type === 'connect') gesture.current = null
+    if (gesture.current?.type === 'connect') {
+      gesture.current = null
+      flushResize()
+    }
     setMenu(null)
     setPending(null)
   }
@@ -211,6 +214,43 @@ export function Canvas({
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
+  // The canvas shrinks when the Inspector docks beside it (selecting a block opens it), which can
+  // clip blocks under the newly-covered strip out of reach. Pan by whatever width/height was lost
+  // so nothing already on screen disappears — but never mid-gesture (that would yank a block out
+  // from under the pointer while it's being dragged or wired); a resize during one is deferred and
+  // applied once the gesture ends, see flushResize below.
+  const deferredResize = useRef({ dx: 0, dy: 0 })
+  const flushResize = () => {
+    const { dx, dy } = deferredResize.current
+    if (!dx && !dy) return
+    deferredResize.current = { dx: 0, dy: 0 }
+    const { view: v, setView: set } = live.current
+    const next = { ...v, x: v.x + dx, y: v.y + dy }
+    live.current.view = next
+    set(next, 'now')
+  }
+  useEffect(() => {
+    const el = ref.current!
+    let last = el.getBoundingClientRect()
+    const ro = new ResizeObserver(() => {
+      const rect = el.getBoundingClientRect()
+      const dx = rect.width - last.width
+      const dy = rect.height - last.height
+      last = rect
+      if (!dx && !dy) return
+      if (gesture.current) {
+        deferredResize.current = { dx: deferredResize.current.dx + dx, dy: deferredResize.current.dy + dy }
+        return
+      }
+      const { view: v, setView: set } = live.current
+      const next = { ...v, x: v.x + dx, y: v.y + dy }
+      live.current.view = next
+      set(next, 'now')
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   // Pan just enough to bring a newly selected block into view (e.g. one just added, or picked from the inspector's Connections list).
   const revealed = useRef<string | null>(null)
   useEffect(() => {
@@ -257,7 +297,7 @@ export function Canvas({
   const onPointerUp = (e: ReactPointerEvent) => {
     const g = gesture.current
     gesture.current = null
-    if (!g) return
+    if (!g) return flushResize()
     if (g.type === 'pan') {
       if (g.moved) setView(view, 'now')
       else onSelect?.(null)
@@ -293,6 +333,9 @@ export function Canvas({
         setPending({ sourceId: g.sourceId, to: at })
       } else setPending(null)
     }
+    // A resize deferred during this gesture (e.g. the Inspector docking) applies now it's over —
+    // after the gesture's own drop logic, so that logic saw the same view it was dragged against.
+    flushResize()
   }
 
   const capture = (e: ReactPointerEvent) => ref.current!.setPointerCapture(e.pointerId)
