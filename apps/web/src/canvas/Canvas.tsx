@@ -170,10 +170,10 @@ export function Canvas({
     else settle.current = setTimeout(() => report(v), SETTLE_MS)
   }
   useEffect(() => () => clearTimeout(settle.current), [])
-  // Event listeners registered once read the current view and setter through refs.
-  const live = useRef({ view, setView })
+  // Event listeners registered once read the current view, setter and blocks through refs.
+  const live = useRef({ view, setView, blocks })
   useLayoutEffect(() => {
-    live.current = { view, setView }
+    live.current = { view, setView, blocks }
   })
 
   const toWorld = (clientX: number, clientY: number): Point => {
@@ -215,10 +215,13 @@ export function Canvas({
   }, [])
 
   // The canvas shrinks when the Inspector docks beside it (selecting a block opens it), which can
-  // clip blocks under the newly-covered strip out of reach. Pan by whatever width/height was lost
-  // so nothing already on screen disappears — but never mid-gesture (that would yank a block out
-  // from under the pointer while it's being dragged or wired); a resize during one is deferred and
-  // applied once the gesture ends, see flushResize below.
+  // clip blocks under the newly-covered strip out of reach. Pan by whatever width/height was lost,
+  // but only when that strip actually has a block in it — panning on every select/deselect (most
+  // of the time nothing's there) just makes the view jump around for no reason. Never pan
+  // mid-gesture either (that would yank a block out from under the pointer while it's being
+  // dragged or wired); a resize during one is deferred and applied once the gesture ends, see
+  // flushResize below. Growing back (the panel closing) never needs compensating — nothing is
+  // newly hidden by more room — so that direction is just ignored.
   const deferredResize = useRef({ dx: 0, dy: 0 })
   const flushResize = () => {
     const { dx, dy } = deferredResize.current
@@ -234,15 +237,26 @@ export function Canvas({
     let last = el.getBoundingClientRect()
     const ro = new ResizeObserver(() => {
       const rect = el.getBoundingClientRect()
-      const dx = rect.width - last.width
-      const dy = rect.height - last.height
+      const dx = Math.min(0, rect.width - last.width)
+      const dy = Math.min(0, rect.height - last.height)
       last = rect
       if (!dx && !dy) return
+      const { view: v, blocks: bs } = live.current
+      const newlyHidden = bs.some((b) => {
+        const left = b.x * v.zoom + v.x
+        const top = b.y * v.zoom + v.y
+        const right = left + BLOCK_WIDTH * v.zoom
+        const bottom = top + BLOCK_HEIGHT * v.zoom
+        const coveredX = dx < 0 && right > rect.width && left < rect.width - dx
+        const coveredY = dy < 0 && bottom > rect.height && top < rect.height - dy
+        return coveredX || coveredY
+      })
+      if (!newlyHidden) return
       if (gesture.current) {
         deferredResize.current = { dx: deferredResize.current.dx + dx, dy: deferredResize.current.dy + dy }
         return
       }
-      const { view: v, setView: set } = live.current
+      const { setView: set } = live.current
       const next = { ...v, x: v.x + dx, y: v.y + dy }
       live.current.view = next
       set(next, 'now')
