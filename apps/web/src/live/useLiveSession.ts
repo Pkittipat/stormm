@@ -3,6 +3,17 @@ import { useEffect, useRef, useState } from 'react'
 import { WebrtcProvider } from 'y-webrtc'
 import * as Y from 'yjs'
 
+// y-webrtc's own default (a single server) isn't always reachable — public, free signaling
+// servers go down or get blocked by a given network without warning. The client tries all of
+// these concurrently and uses whichever answers first, so one or more being dead doesn't block
+// the rest; this is the list y-webrtc's own README recommends for exactly this reason.
+const SIGNALING_SERVERS = [
+  'wss://y-webrtc-eu.fly.dev',
+  'wss://signaling.yjs.dev',
+  'wss://y-webrtc-signaling-eu.herokuapp.com',
+  'wss://y-webrtc-signaling-us.herokuapp.com',
+]
+
 export interface LiveSession {
   active: boolean
   /** Other browsers currently in the room (not counting this one). */
@@ -50,7 +61,7 @@ export function useLiveSession(params: {
     if (!processId || !roomCode) return
     const doc = new Y.Doc()
     const map = doc.getMap<string>('board')
-    const provider = new WebrtcProvider(`stormm-live-${processId}-${roomCode}`, doc, {})
+    const provider = new WebrtcProvider(`stormm-live-${processId}-${roomCode}`, doc, { signaling: SIGNALING_SERVERS })
     session.current = { doc, map, provider }
     canPublish.current = !joining
     lastRemoteBoard.current = null
