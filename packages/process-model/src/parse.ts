@@ -24,8 +24,21 @@ const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => Record<string
 export function parseBoard(text: string): ParseResult {
   const issues: Issue[] = []
   const doc = parseDocument(text, { uniqueKeys: true })
-  for (const e of doc.errors) issues.push({ level: 'error', code: 'yaml-syntax', message: e.message })
-  for (const w of doc.warnings) issues.push({ level: 'warning', code: 'yaml-warning', message: w.message })
+  // The yaml library's e.message bundles a source-snippet-and-caret code frame onto the real
+  // reason as extra lines; the reason plus "at line L, column C" is always the first line, so
+  // drop the rest — a wall of ASCII-art isn't human-readable in a one-line issue row. One typo
+  // can also desync the parser into a cascade of a dozen+ follow-on errors that don't say
+  // anything the first one didn't; past a few, summarize instead of listing them all.
+  const line1 = (m: string) => m.split('\n', 1)[0].replace(/:$/, '')
+  const MAX_SYNTAX_ERRORS = 3
+  for (const e of doc.errors.slice(0, MAX_SYNTAX_ERRORS)) issues.push({ level: 'error', code: 'yaml-syntax', message: line1(e.message) })
+  if (doc.errors.length > MAX_SYNTAX_ERRORS)
+    issues.push({
+      level: 'error',
+      code: 'yaml-syntax',
+      message: `${doc.errors.length - MAX_SYNTAX_ERRORS} more syntax error${doc.errors.length - MAX_SYNTAX_ERRORS > 1 ? 's' : ''} follow from the same spot — fix the first one and check again.`,
+    })
+  for (const w of doc.warnings) issues.push({ level: 'warning', code: 'yaml-warning', message: line1(w.message) })
   if (doc.errors.length) return { board: null, issues }
 
   const r = new Reader(issues)
