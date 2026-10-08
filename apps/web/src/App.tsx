@@ -85,7 +85,7 @@ function App() {
   }
 
   const fail = useCallback((e: unknown) => setNotice({ text: e instanceof Error ? e.message : String(e), error: true }), [])
-  const { open, loadError, saveState, edit, setProjectId } = useProcess(processId, fail)
+  const { open, loadError, saveState, edit, undo, redo, canUndo, canRedo, setProjectId } = useProcess(processId, fail)
   const board: Board | null = open?.id === processId ? open.board : null
 
   useEffect(() => {
@@ -445,7 +445,8 @@ function App() {
   }
 
   // Delete/Backspace removes the selection, Escape clears it, Cmd/Ctrl+C copies the selected
-  // blocks and Cmd/Ctrl+A selects them all. Ignored while typing.
+  // blocks, Cmd/Ctrl+A selects them all, and Cmd/Ctrl+Z / Shift+Z undoes/redoes the last edit.
+  // Ignored while typing (a text field's own undo takes over there).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement
@@ -466,6 +467,15 @@ function App() {
       if (mod && e.key.toLowerCase() === 'a' && board && (el === document.body || el.closest('[aria-label="Process canvas"]'))) {
         e.preventDefault()
         setSelection(selectBlocks(board.blocks.map((b) => b.id)))
+      }
+      if (mod && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) redo()
+        else undo()
+      }
+      if (mod && e.key.toLowerCase() === 'y') {
+        e.preventDefault()
+        redo()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -529,6 +539,8 @@ function App() {
                     {SAVE_LABEL[saveState]}
                   </span>
                 )}
+                <IconButton size="md" aria-label="Undo" disabled={!canUndo} onClick={undo} icon={<UndoIcon />} className="disabled:cursor-not-allowed disabled:opacity-40" />
+                <IconButton size="md" aria-label="Redo" disabled={!canRedo} onClick={redo} icon={<RedoIcon />} className="disabled:cursor-not-allowed disabled:opacity-40" />
                 <Button variant="secondary" onClick={deleteProcess}>
                   Delete
                 </Button>
@@ -643,6 +655,24 @@ function SidebarIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <path d="M9 4v16" />
+    </svg>
+  )
+}
+
+function UndoIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 7 3 11l5 4" />
+      <path d="M3 11h12a5 5 0 0 1 0 10h-3" />
+    </svg>
+  )
+}
+
+function RedoIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m16 7 5 4-5 4" />
+      <path d="M21 11H9a5 5 0 0 0 0 10h3" />
     </svg>
   )
 }
