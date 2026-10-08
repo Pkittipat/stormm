@@ -1,4 +1,4 @@
-import { newBoard, newId, parseBoard, toYaml, validate, type Board, type Issue } from '@stormm/process-model'
+import { newBoard, newId, parseBoard, SCHEMA_VERSION, toYaml, validate, type Board, type Issue } from '@stormm/process-model'
 
 export interface Project {
   id: string
@@ -96,6 +96,24 @@ export const storage = {
     const { board, issues } = parseStored(id)
     if (!board) throw new StorageError(`${id}.yaml can't be read as a process`, issues)
     return { projectId: entry.projectId, board, issues: [...issues, ...validate(board), ...idIssues(id, board)] }
+  },
+
+  /**
+   * Opens a process by this exact id, creating an empty placeholder if it isn't here yet —
+   * for joining a live session on a process this browser has never seen before. Live sync
+   * fills it in once connected; the id is whatever the link carries, not freshly generated.
+   */
+  ensureProcess(id: string, name: string): ProcessFile {
+    const index = readIndex()
+    const entry = index.find((e) => e.id === id)
+    if (entry) {
+      const { board, issues } = parseStored(id)
+      if (board) return { projectId: entry.projectId, board, issues: [...issues, ...validate(board), ...idIssues(id, board)] }
+    }
+    const board: Board = { schemaVersion: SCHEMA_VERSION, id, name, blocks: [], connections: [] }
+    localStorage.setItem(processKey(id), toYaml(board))
+    if (!entry) writeJson(INDEX_KEY, [...index, { id, projectId: null }])
+    return { projectId: entry?.projectId ?? null, board, issues: [] }
   },
 
   createProcess(name: string, projectId: string | null): ProcessFile {

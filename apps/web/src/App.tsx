@@ -26,6 +26,7 @@ import { Inspector } from './canvas/Inspector'
 import { YamlPanel } from './canvas/YamlPanel'
 import { Button, Composer, EditableText, Header, IconButton, Sidebar, blockKindLabel, type BlockKind } from './components'
 import { Guide } from './Guide'
+import { useLiveSession } from './live/useLiveSession'
 import { ProcessNav } from './ProcessNav'
 import { storage, type ProcessSummary, type Project } from './storage'
 import { useDraggedPositions } from './useDraggedPositions'
@@ -58,8 +59,10 @@ const readProjects = () => {
   }
 }
 
-const processIdFromHash = () => window.location.hash.match(/^#\/p\/([^/]+)/)?.[1] ?? null
+const processIdFromHash = () => window.location.hash.match(/^#\/p\/([^/?]+)/)?.[1] ?? null
 const isGuideHash = () => window.location.hash === '#/guide'
+const liveCodeFromHash = () => new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('live')
+const newRoomCode = () => Math.random().toString(36).slice(2, 8)
 
 const SAVE_LABEL: Record<SaveState, string> = {
   saved: 'Saved in this browser',
@@ -72,6 +75,12 @@ function App() {
   const [sidebarHidden, setSidebarHidden] = useState(readSidebarHidden)
   const [processId, setProcessId] = useState(processIdFromHash)
   const [guideOpen, setGuideOpen] = useState(isGuideHash)
+  const [liveCode, setLiveCode] = useState(liveCodeFromHash)
+  // True only when this tab opened with a live link already in the URL — as opposed to starting
+  // the session itself via "Go live". A joining tab must not publish its (possibly just-created,
+  // empty) local board until it's heard from the room at least once; useProcess also needs to
+  // know to fall back to an empty placeholder rather than fail when it's never seen this process.
+  const joinedViaLink = useRef(liveCodeFromHash() !== null)
   const [selection, setSelection] = useState<Selection>(null)
   const [yamlOpen, setYamlOpen] = useState(false)
   const [viewport, setViewport] = useState(INITIAL_VIEWPORT)
@@ -88,17 +97,35 @@ function App() {
   }
 
   const fail = useCallback((e: unknown) => setNotice({ text: e instanceof Error ? e.message : String(e), error: true }), [])
-  const { open, loadError, saveState, edit, undo, redo, canUndo, canRedo, setProjectId } = useProcess(processId, fail)
+  const { open, loadError, saveState, edit, undo, redo, canUndo, canRedo, setProjectId } = useProcess(processId, fail, joinedViaLink.current)
   const board: Board | null = open?.id === processId ? open.board : null
+
+  const live = useLiveSession({
+    processId,
+    roomCode: liveCode,
+    joining: joinedViaLink.current,
+    board,
+    onRemoteBoard: useCallback((b: Board) => edit(() => b), [edit]),
+  })
 
   useEffect(() => {
     const onHash = () => {
       setProcessId(processIdFromHash())
       setGuideOpen(isGuideHash())
+      setLiveCode(liveCodeFromHash())
     }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
+
+  const goLive = () => {
+    if (!processId) return
+    const code = newRoomCode()
+    joinedViaLink.current = false
+    window.location.hash = `#/p/${processId}?live=${code}`
+    setLiveCode(code)
+    navigator.clipboard.writeText(window.location.href).then(() => setNotice({ text: 'Live — link copied' }), fail)
+  }
 
   const toggleSidebar = (hidden: boolean) => {
     setSidebarHidden(hidden)
@@ -547,6 +574,20 @@ function App() {
                   <span role="status" className={`mr-step-sm text-meta ${saveState === 'saved' ? 'text-text-muted' : 'text-hotspot-text'}`}>
                     {SAVE_LABEL[saveState]}
                   </span>
+                )}
+                {live.active ? (
+                  <Button
+                    variant="secondary"
+                    title="Copy the live link"
+                    onClick={() => navigator.clipboard.writeText(window.location.href).then(() => setNotice({ text: 'Live link copied' }), fail)}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-event" aria-hidden="true" />
+                    Live{live.peerCount > 0 ? ` · ${live.peerCount + 1}` : ''}
+                  </Button>
+                ) : (
+                  <Button variant="secondary" onClick={goLive}>
+                    Go live
+                  </Button>
                 )}
                 <IconButton size="md" aria-label="Undo" disabled={!canUndo} onClick={undo} icon={<UndoIcon />} className="disabled:cursor-not-allowed disabled:opacity-40" />
                 <IconButton size="md" aria-label="Redo" disabled={!canRedo} onClick={redo} icon={<RedoIcon />} className="disabled:cursor-not-allowed disabled:opacity-40" />

@@ -18,7 +18,7 @@ export interface OpenProcess {
  * drag-to-reposition, which is a separate, personal view preference — see useDraggedPositions)
  * and reset when a different process opens.
  */
-export function useProcess(processId: string | null, onError: (e: unknown) => void) {
+export function useProcess(processId: string | null, onError: (e: unknown) => void, liveJoin?: boolean) {
   const [open, setOpen] = useState<OpenProcess | null>(null)
   const [loadError, setLoadError] = useState<StorageError | null>(null)
   const [saveState, setSaveState] = useState<SaveState>('saved')
@@ -47,7 +47,10 @@ export function useProcess(processId: string | null, onError: (e: unknown) => vo
       try {
         setOpen({ id: processId, ...storage.getProcess(processId) })
       } catch (e) {
-        setLoadError(e instanceof StorageError ? e : new StorageError(String(e)))
+        // A live-session link for a process this browser has never seen before: start from an
+        // empty placeholder instead of failing — live sync fills it in once connected.
+        if (liveJoin) setOpen({ id: processId, ...storage.ensureProcess(processId, 'Live process') })
+        else setLoadError(e instanceof StorageError ? e : new StorageError(String(e)))
       }
     }
   }
