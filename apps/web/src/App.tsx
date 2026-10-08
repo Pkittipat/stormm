@@ -578,11 +578,20 @@ function App() {
                 {live.active ? (
                   <Button
                     variant="secondary"
-                    title="Copy the live link"
+                    title={
+                      live.status === 'offline'
+                        ? "Can't reach a signaling server, so nobody outside this browser can join. See the guide for running your own."
+                        : 'Copy the live link'
+                    }
                     onClick={() => navigator.clipboard.writeText(window.location.href).then(() => setNotice({ text: 'Live link copied' }), fail)}
                   >
-                    <span className="h-1.5 w-1.5 rounded-full bg-event" aria-hidden="true" />
-                    Live{live.peerCount > 0 ? ` · ${live.peerCount + 1}` : ''}
+                    <span
+                      aria-hidden="true"
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        live.status === 'offline' ? 'bg-hotspot' : live.status === 'connected' ? 'bg-event' : 'bg-text-muted'
+                      }`}
+                    />
+                    {live.status === 'offline' ? "Live · can't connect" : live.status === 'connecting' ? 'Connecting…' : `Live · ${live.peers + 1}`}
                   </Button>
                 ) : (
                   <Button variant="secondary" onClick={goLive}>

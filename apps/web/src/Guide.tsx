@@ -113,6 +113,16 @@ export function Guide() {
           <P>Everything saves straight to this browser's storage as you go — there's no server and no account. Use Import/Export (or copy/paste YAML) to move a process between browsers or share it.</P>
         </Section>
 
+        <Section title="Working together, live">
+          <P>“Go live” puts a room code in the URL and copies the link. Anyone who opens that link joins the same session and sees edits as you make them — no account, no sign-in. The button shows how many of you are connected.</P>
+          <P>Board content travels directly between browsers; it never passes through a server. But two browsers that have never met do need a <strong className="text-text">signaling server</strong> to find each other in the first place, and the free public ones this defaults to are often unreachable — plenty of office networks block them outright. When that happens the button says “Live · can't connect”, and nobody outside your own browser can join.</P>
+          <P>
+            The fix is to run your own, which is one command: <code className="rounded-sm bg-surface-raised px-1 font-mono text-meta">pnpm --filter web signal</code>. Then start the app with{' '}
+            <code className="rounded-sm bg-surface-raised px-1 font-mono text-meta">VITE_SIGNALING_URL=ws://localhost:4444</code> pointed at it (use the host machine's LAN address instead of <code className="rounded-sm bg-surface-raised px-1 font-mono text-meta">localhost</code> so others on the network can reach it). It only brokers introductions — your boards still never go through it.
+          </P>
+          <P>One caveat worth knowing: if two people edit the same thing at the same moment, one edit quietly wins. It's built for “one person drives while everyone watches”, not simultaneous editing.</P>
+        </Section>
+
         <Section title="Projects & import">
           <P>Group processes under a project from the sidebar. “Import” accepts one or more <code className="rounded-sm bg-surface-raised px-1 font-mono text-meta">.yaml</code>/<code className="rounded-sm bg-surface-raised px-1 font-mono text-meta">.yml</code> files, or a whole folder — a <code className="rounded-sm bg-surface-raised px-1 font-mono text-meta">.stormm/</code> folder's files import together as one project.</P>
         </Section>
