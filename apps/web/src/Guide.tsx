@@ -1,5 +1,6 @@
 import { BLOCK_KINDS } from '@stormm/process-model'
 import { blockKindClasses, blockKindLabel, TypeSwatch } from './components'
+import { liveConfigured } from './live/client'
 
 /** One step of the usual EventStorming grammar, shown as a labeled arrow chain. */
 const GRAMMAR_STEPS = ['Read model', 'Command', 'Aggregate', 'Event', 'Policy', 'Command'] as const
@@ -110,8 +111,21 @@ export function Guide() {
 
         <Section title="Undo & saving">
           <P>Every edit — renaming, wiring, adding or deleting a block, applying YAML — can be undone and redone (⌘/Ctrl Z, ⌘/Ctrl ⇧ Z). Dragging a block to reposition it is a personal view preference, not board content, so it isn't part of undo history.</P>
-          <P>Everything saves straight to this browser's storage as you go — there's no server and no account. Use Import/Export (or copy/paste YAML) to move a process between browsers or share it.</P>
+          <P>Everything saves straight to this browser's storage as you go — no account, and no copy of a process anywhere else. Use Import/Export (or copy/paste YAML) to move a process between browsers or share it.</P>
         </Section>
+
+        {liveConfigured && (
+          <Section title="Live sessions">
+            <P>
+              <strong className="text-text">Live → Start a session</strong> shares this process under a six-character key. Anyone who types it into <strong className="text-text">Live → Join</strong> edits it with you: one board, everyone's changes appearing as they're made. Your pan, zoom and selection stay yours, so two people can work on different corners at once.
+            </P>
+            <P>
+              Edits merge by who touched each thing last. Two people changing different blocks keep both changes; two people changing the same one settle on the later. Undo takes back your own last edit, and travels like any other.
+            </P>
+            <P>Only the person who started the session keeps the process — it's theirs, and it saves to their browser as you work. Everyone else is offered a copy when the session ends, filed under a new name so nothing of theirs is overwritten. Opening one of your own processes leaves the session.</P>
+            <P>Nothing is stored anywhere else. The key is the whole invitation, so share it like a meeting link — anyone holding it can edit — and the session ends when the host closes the tab.</P>
+          </Section>
+        )}
 
         <Section title="Projects & import">
           <P>Group processes under a project from the sidebar. “Import” accepts one or more <code className="rounded-sm bg-surface-raised px-1 font-mono text-meta">.yaml</code>/<code className="rounded-sm bg-surface-raised px-1 font-mono text-meta">.yml</code> files, or a whole folder — a <code className="rounded-sm bg-surface-raised px-1 font-mono text-meta">.stormm/</code> folder's files import together as one project.</P>

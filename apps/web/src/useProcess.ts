@@ -111,5 +111,19 @@ export function useProcess(processId: string | null, onError: (e: unknown) => vo
 
   const setProjectId = useCallback((projectId: string | null) => setOpen((o) => (o ? { ...o, projectId } : o)), [])
 
-  return { open, loadError, saveState, edit, undo, redo, canUndo: history.canUndo, canRedo: history.canRedo, setProjectId }
+  /**
+   * Adopts a board edited elsewhere — a live session, where the process is shared and everyone's
+   * edits merge. It saves like any other change but is not an entry in this browser's undo
+   * history: pressing undo here must not take back what someone else just did.
+   */
+  const replace = useCallback(
+    (board: Board) => {
+      const c = current()
+      if (!c || c.board === board) return
+      commit(c.id, board)
+    },
+    [processId, open],
+  )
+
+  return { open, loadError, saveState, edit, undo, redo, canUndo: history.canUndo, canRedo: history.canRedo, setProjectId, replace }
 }

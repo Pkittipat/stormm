@@ -31,7 +31,7 @@ export interface CanvasConnection {
   to: string
 }
 
-interface CanvasProps {
+export interface CanvasProps {
   blocks: CanvasBlock[]
   connections: CanvasConnection[]
   selection: Selection

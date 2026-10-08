@@ -2,7 +2,7 @@
 
 pnpm monorepo: a React canvas for Event Storming business processes, where each process is a YAML file.
 
-Everything runs in the browser. There is no server: processes and projects are kept in the browser's `localStorage`.
+Everything runs in the browser. There is no server of ours: processes and projects are kept in the browser's `localStorage`. The one thing that reaches the network is an optional **live session**, where a few people model one process together — that rides on Supabase Realtime and stores nothing (see below); leave it unconfigured and the app is entirely offline.
 
 ## Stack
 
@@ -24,6 +24,15 @@ pnpm install
 pnpm dev:web   # http://localhost:5173
 ```
 
+Live sessions are off until the app knows which Supabase project to meet on. To switch them on, copy `apps/web/.env.example` to `apps/web/.env` and fill in the two values from your project's **Settings → API**:
+
+```
+VITE_SUPABASE_URL=https://xxxx.supabase.co
+VITE_SUPABASE_ANON_KEY=…
+```
+
+Nothing else is needed — no tables, no policies, no sign-in. Both values are public by design: they ship in the bundle, and a public Realtime channel asks for nothing more. Without them the **Live** button simply doesn't appear.
+
 ## Where processes live
 
 In this browser's `localStorage`:
@@ -44,6 +53,11 @@ Every edit writes the whole YAML back straight away. Nothing leaves the browser 
 - **Layout** — positions are derived from the YAML (columns follow the connections; each connected group gets its own rows). Dragging a block is a personal view preference kept in localStorage next to the process; **Reset layout** clears it.
 - **Inspector** — edit a block's title, actor, hotspots and fields; see what it connects from/to.
 - **YAML** — the exact file as stored, its validation errors and warnings, copy and download.
+- **Live sessions** — **Live → Start a session** shares the open process under a six-character key; anyone who types it into **Live → Join** edits it with you. Everyone works on one board — blocks, wires, titles and the arrangement — while each keeps their own pan, zoom and selection, so two people can work on different corners at once.
+
+  Edits merge part by part, by who touched each thing last: two people editing different blocks keep both edits, two people editing the same one settle on the later, and everybody lands on the same board without anyone being in charge (see `packages/process-model/src/merge.ts`). Even two people adding a block at the same instant — which derives the same id from the same default title — end up with both blocks.
+
+  Only the host keeps the result: it's their process, saving to their browser as the session runs. Everyone else is offered a copy when the session ends, filed under a free id so nothing of theirs is overwritten. Nothing is stored anywhere else: the key is the whole invitation, the session ends when the host closes the tab, and anyone holding the key can edit — so share it like a meeting link.
 
 ## Other scripts
 

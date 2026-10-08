@@ -16,6 +16,8 @@ function read(processId: string | null): Positions {
   }
 }
 
+const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+
 function write(processId: string, positions: Positions) {
   try {
     if (Object.keys(positions).length) localStorage.setItem(key(processId), JSON.stringify(positions))
@@ -82,5 +84,18 @@ export function useDraggedPositions(processId: string | null, blockIds: readonly
     setState({ processId, positions: {} })
   }, [processId])
 
-  return { positions, move, rename, reset }
+  /** Takes the whole arrangement from elsewhere — a live session, where it's shared. */
+  const replace = useCallback(
+    (next: Positions) => {
+      if (!processId) return
+      setState((s) => {
+        if (sameJson(s.positions, next)) return s
+        write(processId, next)
+        return { processId, positions: next }
+      })
+    },
+    [processId],
+  )
+
+  return { positions, move, rename, reset, replace }
 }

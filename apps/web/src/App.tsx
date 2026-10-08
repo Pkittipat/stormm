@@ -26,6 +26,8 @@ import { Inspector } from './canvas/Inspector'
 import { YamlPanel } from './canvas/YamlPanel'
 import { Button, Composer, EditableText, Header, IconButton, Sidebar, blockKindLabel, type BlockKind } from './components'
 import { Guide } from './Guide'
+import { LiveControl } from './live/LiveControl'
+import { useLiveSession } from './live/useLiveSession'
 import { ProcessNav } from './ProcessNav'
 import { storage, type ProcessSummary, type Project } from './storage'
 import { useDraggedPositions } from './useDraggedPositions'
@@ -61,6 +63,8 @@ const readProjects = () => {
 const processIdFromHash = () => window.location.hash.match(/^#\/p\/([^/]+)/)?.[1] ?? null
 const isGuideHash = () => window.location.hash === '#/guide'
 
+const NO_POSITIONS: Record<string, Point> = {}
+
 const SAVE_LABEL: Record<SaveState, string> = {
   saved: 'Saved in this browser',
   failed: 'Not saved',
@@ -88,8 +92,65 @@ function App() {
   }
 
   const fail = useCallback((e: unknown) => setNotice({ text: e instanceof Error ? e.message : String(e), error: true }), [])
-  const { open, loadError, saveState, edit, undo, redo, canUndo, canRedo, setProjectId } = useProcess(processId, fail)
-  const board: Board | null = open?.id === processId ? open.board : null
+  const say = useCallback((text: string, error?: boolean) => setNotice({ text, error }), [])
+
+  const {
+    open,
+    loadError,
+    saveState,
+    edit: editOwn,
+    undo: undoOwn,
+    redo: redoOwn,
+    canUndo: canUndoOwn,
+    canRedo: canRedoOwn,
+    setProjectId,
+    replace,
+  } = useProcess(processId, fail)
+  const ownBoard: Board | null = open?.id === processId ? open.board : null
+
+  /** Keeps a board from a session that's over, under a free id so nothing here is overwritten. */
+  const keepCopy = useCallback(
+    (board: Board, asked: string) => {
+      if (!window.confirm(asked)) return
+      try {
+        const { imported } = storage.importProcesses([{ name: `${board.id}.yaml`, text: toYaml(board) }], null)
+        setProcesses(storage.listProcesses())
+        if (imported[0]) window.location.hash = `#/p/${imported[0].id}`
+      } catch (e) {
+        fail(e)
+      }
+    },
+    [fail],
+  )
+
+  const onHostLeft = useCallback(
+    (board: Board | null) => {
+      if (board) keepCopy(board, `The host ended the live session.\n\nKeep a copy of “${board.name}” in this browser?`)
+      else say('The host ended the live session')
+    },
+    [keepCopy, say],
+  )
+
+  // ── Live session ─────────────────────────────────────────────────────────
+  // In a session the canvas shows one board that everyone in it edits — it replaces whatever
+  // process this browser has open, which stays open underneath and untouched. Edits, undo and
+  // the block arrangement all go through the session; the view (pan, zoom, selection) stays
+  // each person's own, since you can't edit a corner of the board you can't look at.
+  //
+  // Only the host keeps the board: it's their process. Everyone else is offered a copy of it
+  // when the session ends.
+  const live = useLiveSession(say, onHostLeft)
+  const inSession = live.session !== null
+  const guesting = live.session?.role === 'guest'
+  const hosting = live.session?.role === 'host'
+  const hostName = live.session?.people.find((p) => p.role === 'host')?.name
+
+  const board: Board | null = inSession ? live.board : ownBoard
+  const edit = inSession ? live.edit : editOwn
+  const undo = inSession ? live.undo : undoOwn
+  const redo = inSession ? live.redo : redoOwn
+  const canUndo = inSession ? live.canUndo : canUndoOwn
+  const canRedo = inSession ? live.canRedo : canRedoOwn
 
   useEffect(() => {
     const onHash = () => {
@@ -131,8 +192,15 @@ function App() {
   // ── Derived view ─────────────────────────────────────────────────────────
 
   const layout = useMemo(() => (board ? layoutBoard(board, LAYOUT) : null), [board])
-  const ids = useMemo(() => (board ? board.blocks.map((b) => b.id) : null), [board])
-  const dragged = useDraggedPositions(processId, ids)
+  // Always this browser's own process: in a session the arrangement is shared, and must not be
+  // pruned against, or written for, the blocks of a board that isn't this browser's.
+  const ownIds = useMemo(() => (ownBoard ? ownBoard.blocks.map((b) => b.id) : null), [ownBoard])
+  const dragged = useDraggedPositions(processId, ownIds)
+  /** Where the blocks sit. In a session that's shared too — otherwise nobody can point at one. */
+  const positions = inSession ? (live.positions ?? NO_POSITIONS) : dragged.positions
+  const moveBlock = inSession ? live.move : dragged.move
+  const renamePosition = inSession ? live.renamePosition : dragged.rename
+  const resetLayout = inSession ? live.resetLayout : dragged.reset
   const issues = useMemo(() => (board ? validate(board) : []), [board])
   const yaml = useMemo(() => (board ? toYaml(board) : ''), [board])
 
@@ -140,8 +208,8 @@ function App() {
   // Memoized so panning/dragging on the canvas (which re-renders App on every settle/frame)
   // doesn't force the whole sidebar to re-sort and re-render along with it.
   const sidebarProcesses = useMemo(
-    () => processes?.map((p) => (p.id === board?.id ? { ...p, name: board.name } : p)) ?? null,
-    [processes, board?.id, board?.name],
+    () => processes?.map((p) => (p.id === ownBoard?.id ? { ...p, name: ownBoard.name } : p)) ?? null,
+    [processes, ownBoard?.id, ownBoard?.name],
   )
 
   const canvasBlocks: CanvasBlock[] = useMemo(() => {
@@ -153,9 +221,9 @@ function App() {
       actor: b.actor,
       hotspots: b.hotspots.length,
       invariants: b.invariants.length,
-      ...(dragged.positions[b.id] ?? layout.positions.get(b.id) ?? { x: 0, y: 0 }),
+      ...(positions[b.id] ?? layout.positions.get(b.id) ?? { x: 0, y: 0 }),
     }))
-  }, [board, layout, dragged.positions])
+  }, [board, layout, positions])
 
   const canvasConnections: CanvasConnection[] = useMemo(
     () => (board ? board.connections.map((c) => ({ id: `${c.from}->${c.to}`, from: c.from, to: c.to })) : []),
@@ -163,6 +231,37 @@ function App() {
   )
 
   const selectedBlock = board && selection?.type === 'block' ? findBlock(board, selection.id) : undefined
+
+  // ── Hosting ──────────────────────────────────────────────────────────────
+  // The shared board is the host's process, so everyone's edits land in their browser as they
+  // arrive — that's the only copy being kept while the session runs.
+  const { leave } = live
+  const draggedReplace = dragged.replace
+  useEffect(() => {
+    if (!hosting || !live.board) return
+    replace(live.board)
+    draggedReplace(live.positions ?? NO_POSITIONS)
+  }, [hosting, live.board, live.positions, replace, draggedReplace])
+
+  /** Leaving offers the board to whoever doesn't already have it — the host's is already saved. */
+  const leaveLive = () => {
+    const shared = guesting ? live.board : null
+    leave()
+    if (shared) keepCopy(shared, `Keep a copy of “${shared.name}” in this browser?`)
+    else say(hosting ? 'Live session ended' : 'Left the live session')
+  }
+
+  // Opening one of your own processes leaves the session — the canvas can only show one board.
+  // Read through a ref so re-renders can't turn this into "leave immediately".
+  const sessionRef = useRef(inSession)
+  const leaveRef = useRef<() => void>(() => {})
+  useEffect(() => {
+    sessionRef.current = inSession
+    leaveRef.current = leaveLive
+  })
+  useEffect(() => {
+    if (sessionRef.current) leaveRef.current()
+  }, [processId])
 
   // ── Edits ────────────────────────────────────────────────────────────────
 
@@ -178,7 +277,7 @@ function App() {
       if (target !== id) {
         freshIds().delete(id)
         freshIds().add(target)
-        dragged.rename(id, target)
+        renamePosition(id, target)
         setSelection((s) => (s?.type === 'block' && s.id === id ? { type: 'block', id: target } : s))
       }
       const { title: _, ...rest } = patch
@@ -228,7 +327,7 @@ function App() {
       const step = 40 * copy.pastes
       for (const [from, to] of ids) {
         const p = copy.positions.get(from)
-        if (p) dragged.move(to, { x: snap(p.x + step), y: snap(p.y + step) })
+        if (p) moveBlock(to, { x: snap(p.x + step), y: snap(p.y + step) })
       }
     }
     setSelection(selectBlocks([...ids.values()]))
@@ -279,7 +378,7 @@ function App() {
     if (!created) return
     freshIds().add(created)
     // The wire's end is the new block's left port.
-    dragged.move(created, { x: snap(at.x), y: snap(at.y - PORT_Y) })
+    moveBlock(created, { x: snap(at.x), y: snap(at.y - PORT_Y) })
     setSelection({ type: 'block', id: created })
   }
 
@@ -293,7 +392,7 @@ function App() {
     })
     if (!created) return
     freshIds().add(created)
-    dragged.move(created, { x: snap(at.x), y: snap(at.y) })
+    moveBlock(created, { x: snap(at.x), y: snap(at.y) })
     setSelection({ type: 'block', id: created })
   }
 
@@ -313,13 +412,14 @@ function App() {
   const renameProcess = (name: string) => {
     if (!board) return
     setRenaming(false)
-    setProcesses((ps) => ps?.map((p) => (p.id === board.id ? { ...p, name } : p)) ?? ps)
+    // The sidebar lists this browser's own processes; a guest renaming the shared board isn't one.
+    if (!guesting) setProcesses((ps) => ps?.map((p) => (p.id === ownBoard?.id ? { ...p, name } : p)) ?? ps)
     edit((b) => renameBoard(b, name))
   }
 
   /** Renames any process from the sidebar; the open one goes through the editor so its undo and save state stay in step. */
   const renameProcessById = (id: string, name: string) => {
-    if (id === board?.id) return renameProcess(name)
+    if (id === ownBoard?.id) return renameProcess(name)
     try {
       storage.renameProcess(id, name)
       setProcesses((ps) => ps?.map((p) => (p.id === id ? { ...p, name } : p)) ?? ps)
@@ -371,10 +471,10 @@ function App() {
   }
 
   const deleteProcess = () => {
-    if (!board || !window.confirm(`Delete “${board.name}”? It is only stored in this browser.`)) return
+    if (!ownBoard || !window.confirm(`Delete “${ownBoard.name}”? It is only stored in this browser.`)) return
     try {
-      storage.deleteProcess(board.id)
-      const rest = (processes ?? []).filter((p) => p.id !== board.id)
+      storage.deleteProcess(ownBoard.id)
+      const rest = (processes ?? []).filter((p) => p.id !== ownBoard.id)
       setProcesses(rest)
       window.location.hash = rest.length ? `#/p/${rest[0].id}` : ''
     } catch (e) {
@@ -489,7 +589,8 @@ function App() {
   })
 
   const errorCount = issues.filter((i) => i.level === 'error').length
-  const hasDrags = Object.keys(dragged.positions).length > 0
+  const hasDrags = Object.keys(positions).length > 0
+
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -531,36 +632,59 @@ function App() {
                 onBlur={() => setRenaming(false)}
                 className="-mx-1 w-96 max-w-full px-1"
               />
+            ) : guesting ? (
+              'Live session'
             ) : (
               'Stormm'
             )
           }
           actions={
+            // The Live control stays reachable with nothing open, so someone can join a session
+            // before they have a process of their own.
             !guideOpen &&
-            board && (
+            (board || live.configured) && (
               <>
                 {notice ? (
                   <span role="status" className={`mr-step-sm text-meta ${notice.error ? 'text-hotspot-text' : 'text-text-muted'}`}>
                     {notice.text}
                   </span>
                 ) : (
-                  <span role="status" className={`mr-step-sm text-meta ${saveState === 'saved' ? 'text-text-muted' : 'text-hotspot-text'}`}>
-                    {SAVE_LABEL[saveState]}
-                  </span>
+                  (guesting || ownBoard) && (
+                    <span role="status" className={`mr-step-sm text-meta ${!guesting && saveState === 'failed' ? 'text-hotspot-text' : 'text-text-muted'}`}>
+                      {guesting ? 'Live · not saved here' : SAVE_LABEL[saveState]}
+                    </span>
+                  )
                 )}
-                <IconButton size="md" aria-label="Undo" disabled={!canUndo} onClick={undo} icon={<UndoIcon />} className="disabled:cursor-not-allowed disabled:opacity-40" />
-                <IconButton size="md" aria-label="Redo" disabled={!canRedo} onClick={redo} icon={<RedoIcon />} className="disabled:cursor-not-allowed disabled:opacity-40" />
-                <Button variant="secondary" onClick={deleteProcess}>
-                  Delete
-                </Button>
-                <Button
-                  variant="primary"
-                  aria-pressed={yamlOpen}
-                  onClick={() => setYamlOpen((o) => !o)}
-                >
-                  YAML
-                  {errorCount > 0 && <span className="rounded-full bg-hotspot-surface px-1.5 text-chip text-hotspot-text">{errorCount}</span>}
-                </Button>
+                {board && (
+                  <>
+                    <IconButton size="md" aria-label="Undo" disabled={!canUndo} onClick={undo} icon={<UndoIcon />} className="disabled:cursor-not-allowed disabled:opacity-40" />
+                    <IconButton size="md" aria-label="Redo" disabled={!canRedo} onClick={redo} icon={<RedoIcon />} className="disabled:cursor-not-allowed disabled:opacity-40" />
+                  </>
+                )}
+                {!guesting && ownBoard && (
+                  <Button variant="secondary" onClick={deleteProcess}>
+                    Delete
+                  </Button>
+                )}
+                {live.configured && (
+                  <LiveControl
+                    session={live.session}
+                    canStart={Boolean(ownBoard)}
+                    onStart={(name) => ownBoard && live.start(name, ownBoard, dragged.positions)}
+                    onJoin={live.join}
+                    onLeave={leaveLive}
+                  />
+                )}
+                {board && (
+                  <Button
+                    variant="primary"
+                    aria-pressed={yamlOpen}
+                    onClick={() => setYamlOpen((o) => !o)}
+                  >
+                    YAML
+                    {errorCount > 0 && <span className="rounded-full bg-hotspot-surface px-1.5 text-chip text-hotspot-text">{errorCount}</span>}
+                  </Button>
+                )}
               </>
             )
           }
@@ -577,7 +701,7 @@ function App() {
               viewport={viewport}
               onViewportChange={setViewport}
               onSelect={setSelection}
-              onMoveBlock={(id, x, y) => dragged.move(id, { x, y })}
+              onMoveBlock={(id, x, y) => moveBlock(id, { x, y })}
               onConnect={connect}
               onRenameBlock={(id, title) => patchBlock(id, { title })}
               onConnectToNew={addConnectedBlock}
@@ -587,7 +711,7 @@ function App() {
             >
               {hasDrags && (
                 <div className="absolute top-step-2xl right-step-2xl">
-                  <Button variant="secondary" onClick={dragged.reset}>
+                  <Button variant="secondary" onClick={resetLayout}>
                     Reset layout
                   </Button>
                 </div>
@@ -604,7 +728,13 @@ function App() {
             </Canvas>
           ) : (
             <section aria-label="Process canvas" className="flex flex-grow flex-col items-center justify-center gap-step-lg bg-surface text-body text-text-muted">
-              {loadError?.issues ? (
+              {guesting ? (
+                live.session?.status === 'error' ? (
+                  <span className="text-hotspot-text">Couldn’t reach that session. Check the key, or your connection.</span>
+                ) : (
+                  `Waiting for ${hostName ?? 'the host'}…`
+                )
+              ) : loadError?.issues ? (
                 <div className="max-w-xl">
                   <div className="mb-step-md text-hotspot-text">{loadError.message}</div>
                   <ul className="m-0 flex flex-col gap-step-xs pl-step-xl text-meta">
@@ -623,7 +753,7 @@ function App() {
               ) : (
                 'No processes yet.'
               )}
-              {processes?.length === 0 && (
+              {!guesting && processes?.length === 0 && (
                 <Button variant="primary" onClick={() => createProcess()}>
                   New process
                 </Button>
