@@ -9,7 +9,9 @@ import {
 } from '@stormm/process-model'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { CursorSource, RemoteCursor } from '../canvas/RemoteCursors'
 import { liveConfigured, loadClient, loadedClient } from './client'
+import { colorOf } from './people'
 import { newSessionKey } from './sessionKey'
 
 export type LiveRole = 'host' | 'guest'
@@ -56,6 +58,22 @@ const topic = (key: string) => `stormm:live:${key}`
  * default message rate too.
  */
 const PUBLISH_MS = 100
+
+/**
+ * Pointers move far too often to ride along with the board — they travel as their own small
+ * message, at most this often. 20 a second is smooth to watch and nowhere near Realtime's
+ * message rate, even with a room full of people.
+ */
+const CURSOR_MS = 50
+
+/** A pointer somewhere in the world, or gone — the sender left the canvas, or the session. */
+interface CursorMessage {
+  from: string
+  name?: string
+  x?: number
+  y?: number
+  gone?: true
+}
 
 interface Message {
   from: string
@@ -130,6 +148,31 @@ export function useLiveSession(
   const hadHost = useRef(false)
   /** The session being opened, so one abandoned while the client loads can't subscribe late. */
   const attempt = useRef<object | null>(null)
+
+  // Everyone else's pointer. Kept out of React state and handed to the canvas as a
+  // subscription: at 20 messages a second per person, re-rendering the editor for each one
+  // would cost far more than drawing the arrow does.
+  const myName = useRef('')
+  const cursors = useRef(new Map<string, RemoteCursor>())
+  const snapshot = useRef<RemoteCursor[]>([])
+  const watchers = useRef(new Set<() => void>())
+  const cursorSource = useRef<CursorSource>({
+    subscribe: (onChange) => {
+      watchers.current.add(onChange)
+      return () => {
+        watchers.current.delete(onChange)
+      }
+    },
+    get: () => snapshot.current,
+  }).current
+  /** A fresh array only when something changed, which is what useSyncExternalStore needs. */
+  const redrawCursors = useCallback(() => {
+    snapshot.current = [...cursors.current.values()]
+    for (const watcher of watchers.current) watcher()
+  }, [])
+  const sentCursorAt = useRef(0)
+  const pendingCursor = useRef<Point | null>(null)
+  const cursorTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const notifyRef = useRef(notify)
   const endedRef = useRef(onHostLeft)
@@ -240,6 +283,54 @@ export function useLiveSession(
   const undo = useCallback(() => step('undo'), [step])
   const redo = useCallback(() => step('redo'), [step])
 
+  const sendCursor = useCallback((point: Point | null) => {
+    sentCursorAt.current = Date.now()
+    const payload: CursorMessage = point ? { from: me.current, name: myName.current, x: point.x, y: point.y } : { from: me.current, gone: true }
+    void channelRef.current?.send({ type: 'broadcast', event: 'cursor', payload })
+  }, [])
+
+  /**
+   * Where this browser's pointer is, in world coordinates, or null having left the canvas.
+   * Throttled: the first move goes at once and the rest settle into one message per tick, so a
+   * fast drag across the board doesn't become a hundred of them.
+   */
+  const moveCursor = useCallback(
+    (point: Point | null) => {
+      if (!channelRef.current) return
+      if (!point) {
+        clearTimeout(cursorTimer.current)
+        cursorTimer.current = undefined
+        pendingCursor.current = null
+        sendCursor(null)
+        return
+      }
+      const since = Date.now() - sentCursorAt.current
+      if (since >= CURSOR_MS && cursorTimer.current === undefined) return sendCursor(point)
+      pendingCursor.current = point
+      cursorTimer.current ??= setTimeout(() => {
+        cursorTimer.current = undefined
+        const waiting = pendingCursor.current
+        pendingCursor.current = null
+        if (waiting) sendCursor(waiting)
+      }, Math.max(0, CURSOR_MS - since))
+    },
+    [sendCursor],
+  )
+
+  const receiveCursor = useCallback(
+    (payload: unknown) => {
+      const message = payload as CursorMessage | null
+      if (!message?.from || message.from === me.current) return
+      if (message.gone || typeof message.x !== 'number' || typeof message.y !== 'number') {
+        if (!cursors.current.delete(message.from)) return
+      } else {
+        cursors.current.set(message.from, { id: message.from, name: message.name || 'Someone', color: colorOf(message.from), x: message.x, y: message.y })
+      }
+      redrawCursors()
+    },
+    [redrawCursors],
+  )
+
   const receive = useCallback(
     (payload: unknown) => {
       const message = payload as Message | null
@@ -259,6 +350,14 @@ export function useLiveSession(
   const closeChannel = useCallback(() => {
     clearTimeout(timer.current)
     timer.current = undefined
+    clearTimeout(cursorTimer.current)
+    cursorTimer.current = undefined
+    pendingCursor.current = null
+    sentCursorAt.current = 0
+    if (cursors.current.size) {
+      cursors.current.clear()
+      redrawCursors()
+    }
     dirty.current = false
     held.current = null
     clock.current = 0
@@ -270,7 +369,7 @@ export function useLiveSession(
     const channel = channelRef.current
     channelRef.current = null
     if (channel) void loadedClient()?.removeChannel(channel)
-  }, [])
+  }, [redrawCursors])
 
   const syncPeople = useCallback(() => {
     const channel = channelRef.current
@@ -281,6 +380,11 @@ export function useLiveSession(
       return meta?.role ? [{ id, name: meta.name || 'Someone', role: meta.role }] : []
     })
     setSession((s) => (s ? { ...s, people } : s))
+
+    const here = new Set(people.map((p) => p.id))
+    let left = false
+    for (const id of [...cursors.current.keys()]) if (!here.has(id)) left = cursors.current.delete(id) || left
+    if (left) redrawCursors()
 
     const host = people.find((p) => p.role === 'host')
     if (host) hadHost.current = true
@@ -295,7 +399,7 @@ export function useLiveSession(
       setHistory({ canUndo: false, canRedo: false })
       endedRef.current(board)
     }
-  }, [closeChannel])
+  }, [closeChannel, redrawCursors])
 
   const open = useCallback(
     (as: LiveRole, key: string, name: string, seed: Shared | null) => {
@@ -308,6 +412,7 @@ export function useLiveSession(
       const id = crypto.randomUUID()
       const opening = {}
       me.current = id
+      myName.current = name
       role.current = as
       attempt.current = opening
       setSession({ role: as, key, name, status: 'connecting', people: [] })
@@ -334,6 +439,7 @@ export function useLiveSession(
               }
             })
             .on('broadcast', { event: 'state' }, ({ payload }) => receive(payload))
+            .on('broadcast', { event: 'cursor' }, ({ payload }) => receiveCursor(payload))
             .subscribe((status) => {
               // A session left (or restarted) while this one was connecting: ignore the late news.
               if (channelRef.current !== channel) return
@@ -353,7 +459,7 @@ export function useLiveSession(
         },
       )
     },
-    [closeChannel, flush, hold, receive, syncPeople],
+    [closeChannel, flush, hold, receive, receiveCursor, syncPeople],
   )
 
   /** Shares the open process under a fresh key, which is then the session's whole invitation. */
@@ -389,6 +495,8 @@ export function useLiveSession(
     start,
     join,
     leave,
+    cursors: cursorSource,
+    moveCursor,
     edit,
     move,
     renamePosition,

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { BLOCK_KINDS } from '@stormm/process-model'
 import { BlockCard, Menu, MenuItem, MenuLabel, TypeSwatch, ZoomControl, blockKindLabel, type BlockKind } from '../components'
+import { RemoteCursors, type CursorSource } from './RemoteCursors'
 import { BLOCK_HEIGHT, BLOCK_WIDTH, PORT_Y, connectorPath, snap, type Point } from './geometry'
 import { selectBlocks, selectedBlockIds, type Selection } from './selection'
 
@@ -53,6 +54,13 @@ export interface CanvasProps {
   /** Right-click on a block or connection: delete it. */
   onDeleteBlock?: (id: string) => void
   onDeleteConnection?: (id: string) => void
+  /**
+   * Where this viewer's pointer is in world coordinates, or null when it leaves the canvas —
+   * for a live session, which shows it to everyone else.
+   */
+  onPointerAt?: (at: Point | null) => void
+  /** Everyone else's pointers, drawn in the world alongside the blocks. */
+  cursors?: CursorSource
   /** Floating overlays (composer, empty state) rendered above the world, unscaled. */
   children?: ReactNode
 }
@@ -90,6 +98,8 @@ export function Canvas({
   onAddBlockAt,
   onDeleteBlock,
   onDeleteConnection,
+  onPointerAt,
+  cursors,
   children,
 }: CanvasProps) {
   const ref = useRef<HTMLElement>(null)
@@ -232,6 +242,7 @@ export function Canvas({
   }, [selection, blocks])
 
   const onPointerMove = (e: ReactPointerEvent) => {
+    onPointerAt?.(toWorld(e.clientX, e.clientY))
     const g = gesture.current
     if (!g) return
     if (g.type === 'pan') {
@@ -331,6 +342,7 @@ export function Canvas({
           : { type: 'marquee', start: toWorld(e.clientX, e.clientY), base: e.shiftKey ? [...selectedIds] : [], moved: false }
       }}
       onPointerMove={onPointerMove}
+      onPointerLeave={() => onPointerAt?.(null)}
       onPointerUp={onPointerUp}
       onPointerCancel={(e) => (gesture.current?.type === 'connect' ? cancelWire() : onPointerUp(e))}
       // Capture can be lost without a pointerup (e.g. the window loses focus); a wire mid-draw is then abandoned.
@@ -453,6 +465,8 @@ export function Canvas({
             />
           </div>
         ))}
+
+        {cursors && <RemoteCursors source={cursors} zoom={view.zoom} />}
       </div>
 
       {menu && (

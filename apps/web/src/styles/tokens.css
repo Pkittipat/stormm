@@ -526,3 +526,35 @@
   --shadow-float-md:
     0 12px 32px rgba(26, 26, 24, 0.1), 0 1px 3px rgba(26, 26, 24, 0.06);
 }
+
+/**
+ * COLOR — PRESENCE (who else is here)
+ * ===================================
+ * One color per person in a live session, picked from the id they hold
+ * for it (see live/people.ts) so everyone sees the same person in the
+ * same color — a color each browser chose for itself would make "the
+ * one in blue" mean nothing. Used for a remote pointer and its name
+ * tag, nothing else.
+ *
+ * Eight hues, spaced to stay apart from each other. Some land near a
+ * block type's hue, which is unavoidable with six of those already
+ * spoken for — a moving arrow with a name tag on it never reads as a
+ * block card, so the overlap doesn't confuse in practice. All are dark
+ * enough to carry white text on the name tag.
+ *
+ * `static` because these are the one set of colors read as variables
+ * (`var(--color-presence-N)`, the index computed at runtime) rather
+ * than through a utility class. A plain `@theme` only emits the
+ * variables some utility actually uses, so these would be dropped from
+ * the stylesheet and every cursor would come out colorless.
+ */
+@theme static {
+  --color-presence-1: #0d9488;
+  --color-presence-2: #4f46e5;
+  --color-presence-3: #e11d48;
+  --color-presence-4: #d97706;
+  --color-presence-5: #7c3aed;
+  --color-presence-6: #0284c7;
+  --color-presence-7: #4d7c0f;
+  --color-presence-8: #a21caf;
+}

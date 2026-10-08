@@ -122,6 +122,9 @@ export function Guide() {
             <P>
               Edits merge by who touched each thing last. Two people changing different blocks keep both changes; two people changing the same one settle on the later. Undo takes back your own last edit, and travels like any other.
             </P>
+            <P>
+              Everyone's pointer shows on the canvas with their name, in a color picked for them for the session — so “this one here” means something even when you're each looking at a different part of the board.
+            </P>
             <P>Only the person who started the session keeps the process — it's theirs, and it saves to their browser as you work. Everyone else is offered a copy when the session ends, filed under a new name so nothing of theirs is overwritten. Opening one of your own processes leaves the session.</P>
             <P>Nothing is stored anywhere else. The key is the whole invitation, so share it like a meeting link — anyone holding it can edit — and the session ends when the host closes the tab.</P>
           </Section>

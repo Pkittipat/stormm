@@ -708,6 +708,8 @@ function App() {
               onAddBlockAt={addBlockAt}
               onDeleteBlock={deleteBlock}
               onDeleteConnection={deleteConnection}
+              onPointerAt={inSession ? live.moveCursor : undefined}
+              cursors={inSession ? live.cursors : undefined}
             >
               {hasDrags && (
                 <div className="absolute top-step-2xl right-step-2xl">
