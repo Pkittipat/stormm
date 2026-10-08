@@ -299,6 +299,9 @@ export function Canvas({
 
   const positioned = blocks.map((b) => (dragOffset?.ids.has(b.id) ? { ...b, x: b.x + dragOffset.dx, y: b.y + dragOffset.dy } : b))
   const selectedIds = new Set(selectedBlockIds(selection))
+  // While a wire is being drawn, highlight whatever block is under the pointer as the drop target.
+  const connectHoverId = pending && blockAt(pending.to)?.id
+  const connectHoverTarget = connectHoverId && connectHoverId !== pending!.sourceId ? connectHoverId : undefined
   const byId = new Map(positioned.map((b) => [b.id, b]))
   const rightPort = (b: CanvasBlock) => ({ x: b.x + BLOCK_WIDTH, y: b.y + PORT_Y })
   const leftPort = (b: CanvasBlock) => ({ x: b.x, y: b.y + PORT_Y })
@@ -431,7 +434,7 @@ export function Canvas({
               actor={b.actor}
               hotspots={b.hotspots}
               invariants={b.invariants}
-              selected={selectedIds.has(b.id)}
+              selected={selectedIds.has(b.id) || connectHoverTarget === b.id}
               editing={editingId === b.id}
               onTitleCommit={(title) => onRenameBlock?.(b.id, title)}
               onEditEnd={() => setEditingId(null)}
