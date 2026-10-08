@@ -15,6 +15,7 @@ import {
   validate,
   type BlockPatch,
   type Board,
+  type Issue,
   type Point,
 } from '@stormm/process-model'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -433,6 +434,16 @@ function App() {
 
   const copyYaml = () => navigator.clipboard.writeText(yaml).then(() => setNotice({ text: 'YAML copied' }), fail)
 
+  /** Parses hand-edited (or pasted) YAML and, if it's a valid process, replaces the board with it — the id stays frozen to this process. */
+  const applyYaml = (text: string): { applied: boolean; issues: Issue[] } => {
+    if (!board) return { applied: false, issues: [] }
+    const { board: parsed, issues: parseIssues } = parseBoard(text)
+    if (!parsed) return { applied: false, issues: parseIssues }
+    const next = { ...parsed, id: board.id }
+    edit(() => next)
+    return { applied: true, issues: [...parseIssues, ...validate(next)] }
+  }
+
   // Delete/Backspace removes the selection, Escape clears it, Cmd/Ctrl+C copies the selected
   // blocks and Cmd/Ctrl+A selects them all. Ignored while typing.
   useEffect(() => {
@@ -604,6 +615,7 @@ function App() {
               issues={issues}
               onCopy={copyYaml}
               onDownload={downloadYaml}
+              onApply={applyYaml}
               onClose={() => setYamlOpen(false)}
             />
           ) : (
