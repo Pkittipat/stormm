@@ -367,7 +367,9 @@ export function Canvas({
     <section
       ref={ref}
       aria-label="Process canvas"
-      className={`relative flex-grow touch-none overflow-hidden bg-surface select-none ${pending ? 'cursor-crosshair' : spaceHeld ? 'cursor-grab' : ''}`}
+      className={`relative flex-grow touch-none overflow-hidden bg-surface select-none ${
+        pending ? 'cursor-crosshair' : dragOffset ? 'cursor-grabbing' : spaceHeld ? 'cursor-grab' : ''
+      }`}
       style={{
         backgroundImage: 'radial-gradient(var(--color-canvas-dot) 1px, transparent 1px)',
         backgroundSize: `${20 * view.zoom}px ${20 * view.zoom}px`,
