@@ -25,6 +25,7 @@ import { LAYOUT, PORT_Y, snap } from './canvas/geometry'
 import { Inspector } from './canvas/Inspector'
 import { YamlPanel } from './canvas/YamlPanel'
 import { Button, Composer, EditableText, Header, IconButton, Sidebar, blockKindLabel, type BlockKind } from './components'
+import { Guide } from './Guide'
 import { ProcessNav } from './ProcessNav'
 import { storage, type ProcessSummary, type Project } from './storage'
 import { useDraggedPositions } from './useDraggedPositions'
@@ -58,6 +59,7 @@ const readProjects = () => {
 }
 
 const processIdFromHash = () => window.location.hash.match(/^#\/p\/([^/]+)/)?.[1] ?? null
+const isGuideHash = () => window.location.hash === '#/guide'
 
 const SAVE_LABEL: Record<SaveState, string> = {
   saved: 'Saved in this browser',
@@ -69,6 +71,7 @@ function App() {
   const [projects, setProjects] = useState<Project[]>(readProjects)
   const [sidebarHidden, setSidebarHidden] = useState(readSidebarHidden)
   const [processId, setProcessId] = useState(processIdFromHash)
+  const [guideOpen, setGuideOpen] = useState(isGuideHash)
   const [selection, setSelection] = useState<Selection>(null)
   const [yamlOpen, setYamlOpen] = useState(false)
   const [viewport, setViewport] = useState(INITIAL_VIEWPORT)
@@ -89,7 +92,10 @@ function App() {
   const board: Board | null = open?.id === processId ? open.board : null
 
   useEffect(() => {
-    const onHash = () => setProcessId(processIdFromHash())
+    const onHash = () => {
+      setProcessId(processIdFromHash())
+      setGuideOpen(isGuideHash())
+    }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
@@ -103,10 +109,10 @@ function App() {
     }
   }
 
-  // With no process in the URL, open the first one.
+  // With no process in the URL, open the first one — unless the guide is what was asked for.
   useEffect(() => {
-    if (!processId && processes?.length) window.location.hash = `#/p/${processes[0].id}`
-  }, [processId, processes])
+    if (!processId && !guideOpen && processes?.length) window.location.hash = `#/p/${processes[0].id}`
+  }, [processId, guideOpen, processes])
 
   // Switching process starts from a clean view.
   const [viewFor, setViewFor] = useState(processId)
@@ -488,7 +494,7 @@ function App() {
   return (
     <div className="flex h-screen overflow-hidden">
       {!sidebarHidden && (
-        <Sidebar userInitial="F" userName="Fang" onCollapse={() => toggleSidebar(true)}>
+        <Sidebar userInitial="F" userName="Fang" onCollapse={() => toggleSidebar(true)} onGuide={() => (window.location.hash = '#/guide')} guideActive={guideOpen}>
           <ProcessNav
             processes={sidebarProcesses}
             projects={projects}
@@ -512,7 +518,9 @@ function App() {
             )
           }
           title={
-            board ? (
+            guideOpen ? (
+              'Guide'
+            ) : board ? (
               <EditableText
                 key={board.id}
                 aria-label="Process name"
@@ -528,6 +536,7 @@ function App() {
             )
           }
           actions={
+            !guideOpen &&
             board && (
               <>
                 {notice ? (
@@ -558,7 +567,9 @@ function App() {
         />
 
         <div className="relative flex min-h-0 flex-grow">
-          {board && layout ? (
+          {guideOpen ? (
+            <Guide />
+          ) : board && layout ? (
             <Canvas
               blocks={canvasBlocks}
               connections={canvasConnections}
