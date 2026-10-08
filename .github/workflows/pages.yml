@@ -28,6 +28,11 @@ jobs:
       - run: pnpm --filter web build
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
+          # Live sessions. Repository *variables*, not secrets: both values are public by
+          # design — they ship in the built bundle, and a public Realtime channel asks for
+          # nothing more. Unset them and the deployed app simply has no Live button.
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
       - uses: actions/upload-pages-artifact@v4
         with:
           path: apps/web/dist
